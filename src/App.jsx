@@ -6,6 +6,8 @@ import Container from "@mui/material/Container";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
 import Box from "@mui/material/Box";
+import { messaging } from './firebase';
+import { getToken, onMessage } from "firebase/messaging";
 
 import WeekPlanner from "./components/WeekPlanner";
 import DagPlanner from "./components/DagPlanner";
@@ -19,8 +21,51 @@ import {
 } from './services/goalsService';
 
 function App() {
+  async function requestPermission() {
+    const permission = await Notification.requestPermission();
+    if(permission === 'granted'){
+    const token = await getToken(messaging, { vapidKey: "VAPID_KEY_HIER" });
+    console.log("FCM Token:", token);
+    // Stuur token naar jouw backend of Supabase
+    }
+  }
+
+  requestPermission();
+
+// Ontvang realtime berichten
+  onMessage(messaging, (payload) => {
+    console.log('Message received: ', payload);
+  });
+
+  function useDailyNotification() {
+    useEffect(() => {
+      // Controleer of browser notificaties ondersteunt
+      if (!("Notification" in window)) return;
+
+      // Vraag toestemming bij eerste keer openen
+      if (Notification.permission !== "granted") {
+        Notification.requestPermission();
+      }
+
+      // Functie om te checken of het 20:00 is en een notificatie te sturen
+      const checkTime = () => {
+        const now = new Date();
+        if (now.getHours() === 20 && now.getMinutes() === 0) {
+          new Notification("Dagelijkse check", {
+            body: "Heb je je doelen van vandaag voltooid?",
+          });
+        }
+      };
+
+      // Check elke minuut
+      const interval = setInterval(checkTime, 60000);
+
+      return () => clearInterval(interval); // cleanup bij unmount
+    }, []);
+  }
+
   // 🌙 Dark mode
-  const [darkMode, setDarkMode] = useState(false);
+  useDailyNotification();
   
   function getCurrentWeekKey() {
     const today = new Date();
@@ -47,9 +92,9 @@ const [weekGoals, setWeekGoals] = useState([]);
 
 
   useEffect(()=>{
-    async function fetchWeekGoals(){ setWeekGoals(await getWeekGoals(currentWeekStart.toISOString().split("T")[0])); }
+    async function fetchWeekGoals(){ setWeekGoals(await getWeekGoals(currentWeekKey.toISOString().split("T")[0])); }
     fetchWeekGoals();
-  }, [currentWeekStart]);
+  }, [currentWeekKey]);
 
   useEffect(()=>{
     if(selectedDay){
@@ -63,12 +108,12 @@ const [weekGoals, setWeekGoals] = useState([]);
 
   // 🗓 Weeknavigatie
   const previousWeek = () => {
-    const prev = new Date(currentWeekStart);
+    const prev = new Date(currentWeekKey);
     prev.setDate(prev.getDate() - 7);
     setCurrentWeekStart(prev);
   };
   const nextWeek = () => {
-    const next = new Date(currentWeekStart);
+    const next = new Date(currentWeekKey);
     next.setDate(next.getDate() + 7);
     setCurrentWeekStart(next);
   };
